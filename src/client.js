@@ -1,3 +1,5 @@
+const bodyParser = require('body-parser');
+const express = require('express');
 const nats = require('nats');
 const createError = require('http-errors');
 const ResourceSubscription = require('./subscription');
@@ -32,6 +34,22 @@ class ResourceClient {
       };
     }
     return this._proxy;
+  }
+
+  /**
+   * An Express router which can be used to proxy HTTP requests to the resource server over NATS.
+   * Comes configured with default routes for the GET, PUT, PATCH and DELETE verbs.
+   */
+  get router() {
+    if (!this._router) {
+      const jsonParser = bodyParser.json();
+      this._router = express.Router();
+      this._router.get('/:id', this.proxy);
+      this._router.put('/:id', jsonParser, this.proxy);
+      this._router.patch('/:id', jsonParser, this.proxy);
+      this._router.delete('/:id', this.proxy);
+    }
+    return this._router;
   }
 
   /**
