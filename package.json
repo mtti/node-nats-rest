@@ -1,0 +1,32 @@
+{
+  "name": "@mtti/nats-rest",
+  "version": "0.1.0",
+  "description": "REST over NATS",
+  "author": "Matti Hiltunen",
+  "license": "Apache-2.0",
+  "repository": "github:mtti/node-nats-rest",
+  "main": "index.js",
+  "scripts": {
+    "lint": "eslint \"src/**/*.js\" \"test/**/*.js\"",
+    "lint:fix": "eslint --fix \"src/**/*.js\" \"test/**/*.js\"",
+    "mocha": "mocha test/setup.js \"src/**/*.spec.js\"",
+    "test": "npm run mocha && npm run lint"
+  },
+  "dependencies": {
+    "http-errors": "1.6.2",
+    "lodash": "4.17.5",
+    "nats": "0.7.24"
+  },
+  "devDependencies": {
+    "chai": "4.1.2",
+    "chai-subset": "1.6.0",
+    "eslint": "4.16.0",
+    "eslint-config-airbnb-base": "12.1.0",
+    "eslint-plugin-import": "2.8.0",
+    "mocha": "5.0.0",
+    "sinon": "4.2.1"
+  },
+  "files": [
+    "src"
+  ]
+}
