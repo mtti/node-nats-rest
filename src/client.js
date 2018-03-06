@@ -4,10 +4,16 @@ const nats = require('nats');
 const createError = require('http-errors');
 const ResourceSubscription = require('./subscription');
 
+const jsonParser = bodyParser.json();
+
 class ResourceClient {
-  constructor(natsClient, name) {
+  constructor(natsClient, name, options = {}) {
     this._natsClient = natsClient;
     this._name = name;
+
+    if (options.logger) {
+      this._logger = options.logger;
+    }
   }
 
   /**
@@ -42,7 +48,6 @@ class ResourceClient {
    */
   get router() {
     if (!this._router) {
-      const jsonParser = bodyParser.json();
       this._router = express.Router();
       this._router.get('/:id', this.proxy);
       this._router.put('/:id', jsonParser, this.proxy);
@@ -53,11 +58,33 @@ class ResourceClient {
   }
 
   /**
+   * Adds collection action routes to the internal Express router.
+   * @param {Array} verbs
+   */
+  routeCollectionActions(verbs) {
+    verbs.forEach((verb) => {
+      this.router.post(`/${verb}`, jsonParser, this._proxyAction(verb));
+    });
+    return this;
+  }
+
+  /**
+   * Adds instance action routes to the internal Express router.
+   * @param {Array} verbs
+   */
+  routeInstanceActions(verbs) {
+    verbs.forEach((verb) => {
+      this.router.post(`/:id/${verb}`, jsonParser, this._proxyAction(verb));
+    });
+    return this;
+  }
+
+  /**
    * Perform a GET request.
    * @param {*} id
    */
   get(id) {
-    return request.request('GET', id);
+    return this.request('GET', id);
   }
 
   /**
@@ -105,6 +132,7 @@ class ResourceClient {
     const subject = `${this._name}.${verb}`;
 
     return new Promise((resolve, reject) => {
+      this._debug(`NATS requestOne ${subject}`);
       this._natsClient.requestOne(subject, JSON.stringify(request), {}, 1000, (rawResponse) => {
         if (rawResponse.code && rawResponse.code === nats.REQ_TIMEOUT) {
           reject(createError(504));
@@ -129,6 +157,29 @@ class ResourceClient {
       cb(message);
     });
     return new ResourceSubscription(this._natsClient, sid);
+  }
+
+  _proxyAction(verb) {
+    return (req, res) => {
+      this.request(verb, req.params.id, req.body)
+        .then((result) => {
+          res.json(result);
+        })
+        .catch((err) => {
+          if (err.statusCode) {
+            res.status(err.statusCode);
+          } else {
+            res.status(500);
+          }
+          res.end();
+        });
+    };
+  }
+
+  _debug(message) {
+    if (this._logger) {
+      this._logger.debug(message);
+    }
   }
 }
 

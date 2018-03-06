@@ -13,6 +13,7 @@ class ResourceServer {
       queue: 'rest',
     };
     _.forOwn(this._handlers, (handler, verb, object) => {
+      this._debug(`NATS subscribe ${this._name}.${verb}`);
       this._natsClient.subscribe(`${this._name}.${verb}`, options, (rawRequest, replyTo) => {
         this._debug(`NATS REC ${this._name}.${verb} -> ${rawRequest}`);
         this._receive(verb, rawRequest, replyTo, handler);
