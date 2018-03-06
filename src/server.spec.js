@@ -1,4 +1,3 @@
-const _ = require('lodash');
 const createError = require('http-errors');
 const ResourceServer = require('./server');
 
@@ -48,7 +47,7 @@ describe('ResourceServer', () => {
         id: '1234',
         body: {
           foo: 'bar',
-        }
+        },
       };
     });
 

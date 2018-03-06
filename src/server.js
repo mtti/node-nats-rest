@@ -1,6 +1,18 @@
 const _ = require('lodash');
 
 class ResourceServer {
+  static _parseRequest(rawRequest) {
+    return new Promise((resolve, reject) => {
+      try {
+        const request = JSON.parse(rawRequest);
+        resolve(request);
+      } catch (err) {
+        const newErr = new Error('JSON parse error');
+        reject(newErr);
+      }
+    });
+  }
+
   constructor(natsClient, name, handlers, logger) {
     this._natsClient = natsClient;
     this._name = name;
@@ -12,7 +24,7 @@ class ResourceServer {
     const options = {
       queue: 'rest',
     };
-    _.forOwn(this._handlers, (handler, verb, object) => {
+    _.forOwn(this._handlers, (handler, verb) => {
       this._debug(`NATS subscribe ${this._name}.${verb}`);
       this._natsClient.subscribe(`${this._name}.${verb}`, options, (rawRequest, replyTo) => {
         this._debug(`NATS REC ${this._name}.${verb} -> ${rawRequest}`);
@@ -28,10 +40,8 @@ class ResourceServer {
   }
 
   _receive(verb, rawRequest, replyTo, handler) {
-    return this._parseRequest(rawRequest)
-      .then((request) => {
-        return handler(request.id, request.body);
-      })
+    return ResourceServer._parseRequest(rawRequest)
+      .then(request => handler(request.id, request.body))
       .then((result) => {
         const response = JSON.stringify({
           status: 200,
@@ -57,18 +67,6 @@ class ResourceServer {
         this._debug(`NATS PUB ${replyTo} <- ${rawResponse}`);
         this._natsClient.publish(replyTo, rawResponse);
       });
-  }
-
-  _parseRequest(rawRequest) {
-    return new Promise((resolve, reject) => {
-      try {
-        const request = JSON.parse(rawRequest);
-        resolve(request);
-      } catch (err) {
-        const newErr = new Error('JSON parse error');
-        reject(newErr);
-      }
-    });
   }
 
   _debug(message) {

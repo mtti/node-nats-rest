@@ -23,7 +23,7 @@ class ResourceClient {
     if (!this._proxy) {
       this._proxy = (req, res) => {
         const verb = req.method;
-        const id = req.params.id;
+        const { id } = req.params;
 
         this.request(verb, id, req.body)
           .then((result) => {
