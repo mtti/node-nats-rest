@@ -13,21 +13,33 @@ class ResourceServer {
     });
   }
 
-  constructor(natsClient, name, handlers, logger) {
+  constructor(natsClient, name, options) {
     this._natsClient = natsClient;
     this._name = name;
-    this._handlers = handlers;
-    this._logger = logger;
+
+    this._logger = options.logger;
+    this._collectionActions = options.collectionActions;
+    this._instanceActions = options.instanceActions;
   }
 
   start() {
     const options = {
       queue: 'rest',
     };
-    _.forOwn(this._handlers, (handler, verb) => {
-      this._debug(`NATS subscribe ${this._name}.${verb}`);
-      this._natsClient.subscribe(`${this._name}.${verb}`, options, (rawRequest, replyTo) => {
-        this._debug(`NATS REC ${this._name}.${verb} -> ${rawRequest}`);
+    _.forOwn(this._collectionActions, (handler, verb) => {
+      const subject = `${this._name}.collection.${verb}`;
+      this._debug(`NATS subscribe ${subject}`);
+      this._natsClient.subscribe(`${subject}`, options, (rawRequest, replyTo) => {
+        this._debug(`NATS REC ${subject} -> ${rawRequest}`);
+        this._receive(verb, rawRequest, replyTo, handler);
+      });
+    });
+
+    _.forOwn(this._instanceActions, (handler, verb) => {
+      const subject = `${this._name}.instance.${verb}`;
+      this._debug(`NATS subscribe ${subject}`);
+      this._natsClient.subscribe(`${subject}`, options, (rawRequest, replyTo) => {
+        this._debug(`NATS REC ${subject} -> ${rawRequest}`);
         this._receive(verb, rawRequest, replyTo, handler);
       });
     });

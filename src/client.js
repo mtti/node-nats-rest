@@ -129,7 +129,12 @@ class ResourceClient {
       request.body = body;
     }
 
-    const subject = `${this._name}.${verb}`;
+    let subject;
+    if (id) {
+      subject = `${this._name}.instance.${verb}`;
+    } else {
+      subject = `${this._name}.collection.${verb}`;
+    }
 
     return new Promise((resolve, reject) => {
       this._debug(`NATS requestOne ${subject}`);

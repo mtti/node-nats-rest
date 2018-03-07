@@ -4,7 +4,7 @@ const ResourceServer = require('./server');
 describe('ResourceServer', () => {
   const testVerbs = ['GET', 'PUT', 'PATCH', 'DELETE'];
   let server;
-  let resource;
+  let serverOptions;
   let handler;
   let natsClient;
 
@@ -14,12 +14,15 @@ describe('ResourceServer', () => {
       subscribe: spy(),
     };
 
-    resource = {};
+    serverOptions = {
+      collectionActions: {},
+      instanceActions: {},
+    };
     testVerbs.forEach((verb) => {
-      resource[verb] = spy();
+      serverOptions.instanceActions[verb] = spy();
     });
 
-    server = new ResourceServer(natsClient, 'dummy', resource);
+    server = new ResourceServer(natsClient, 'dummy', serverOptions);
   });
 
   describe('start', () => {
@@ -28,11 +31,11 @@ describe('ResourceServer', () => {
     });
 
     it('subscribes to the correct number of subjects', () => {
-      assert.equal(natsClient.subscribe.callCount, testVerbs.length);
+      expect(natsClient.subscribe.callCount).to.equal(testVerbs.length);
     });
 
     testVerbs.forEach((key) => {
-      const expectedSubject = `dummy.${key}`;
+      const expectedSubject = `dummy.instance.${key}`;
       it(`subscribes to ${expectedSubject}`, () => {
         assert.equal(natsClient.subscribe.calledWith(expectedSubject), true);
       });

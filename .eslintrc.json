@@ -8,7 +8,8 @@
     "sandbox": true,
     "sinon": true,
     "spy": true,
-    "stub": true
+    "stub": true,
+    "expect": true
   },
   "rules": {
     "import/no-extraneous-dependencies": ["error", {"devDependencies": ["test/**/*.js", "src/**/*.spec.js"]}],
