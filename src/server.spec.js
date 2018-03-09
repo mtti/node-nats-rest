@@ -42,7 +42,7 @@ describe('ResourceServer', () => {
     });
   });
 
-  describe('_receive', () => {
+  describe('_handleInstanceAction', () => {
     let request;
 
     beforeEach(() => {
@@ -61,7 +61,12 @@ describe('ResourceServer', () => {
 
       beforeEach(() => {
         handler = sinon.stub().resolves(result);
-        return server._receive('dummyVerb', JSON.stringify(request), 'replyTopic', handler);
+        return server._handleInstanceAction(
+          'dummyVerb',
+          JSON.stringify(request),
+          'replyTopic',
+          handler,
+        );
       });
 
       it('calls handler with ID and body', () => {
@@ -89,7 +94,12 @@ describe('ResourceServer', () => {
     describe('when handler returns promise rejected with HTTP 404 error', () => {
       beforeEach(() => {
         handler = sinon.stub().rejects(createError(404));
-        return server._receive('dummyVerb', JSON.stringify(request), 'replyTopic', handler);
+        return server._handleInstanceAction(
+          'dummyVerb',
+          JSON.stringify(request),
+          'replyTopic',
+          handler,
+        );
       });
 
       it('calls handler with ID and body', () => {
@@ -112,7 +122,12 @@ describe('ResourceServer', () => {
     describe('when handler returns promise rejected with regular error', () => {
       beforeEach(() => {
         handler = sinon.stub().rejects(new Error('Generic error'));
-        return server._receive('dummyVerb', JSON.stringify(request), 'replyTopic', handler);
+        return server._handleInstanceAction(
+          'dummyVerb',
+          JSON.stringify(request),
+          'replyTopic',
+          handler,
+        );
       });
 
       it('calls handler with ID and body', () => {
@@ -135,7 +150,12 @@ describe('ResourceServer', () => {
     describe('when handler throws a regular error', () => {
       beforeEach(() => {
         handler = sinon.stub().throws(new Error('Generic thrown error'));
-        return server._receive('dummyVerb', JSON.stringify(request), 'replyTopic', handler);
+        return server._handleInstanceAction(
+          'dummyVerb',
+          JSON.stringify(request),
+          'replyTopic',
+          handler,
+        );
       });
 
       it('calls handler with ID and body', () => {

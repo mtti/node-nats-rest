@@ -31,7 +31,7 @@ class ResourceServer {
       this._debug(`NATS subscribe ${subject}`);
       this._natsClient.subscribe(`${subject}`, options, (rawRequest, replyTo) => {
         this._debug(`NATS REC ${subject} -> ${rawRequest}`);
-        this._receive(verb, rawRequest, replyTo, handler);
+        this._handleCollectionAction(verb, rawRequest, replyTo, handler);
       });
     });
 
@@ -40,7 +40,7 @@ class ResourceServer {
       this._debug(`NATS subscribe ${subject}`);
       this._natsClient.subscribe(`${subject}`, options, (rawRequest, replyTo) => {
         this._debug(`NATS REC ${subject} -> ${rawRequest}`);
-        this._receive(verb, rawRequest, replyTo, handler);
+        this._handleInstanceAction(verb, rawRequest, replyTo, handler);
       });
     });
   }
@@ -51,34 +51,44 @@ class ResourceServer {
     this._natsClient.publish(this._name, rawMessage);
   }
 
-  _receive(verb, rawRequest, replyTo, handler) {
+  _handleCollectionAction(verb, rawRequest, replyTo, handler) {
+    return ResourceServer._parseRequest(rawRequest)
+      .then(request => handler(request.body))
+      .then(result => this._sendResponse(replyTo, result))
+      .catch(error => this._sendError(replyTo, error));
+  }
+
+  _handleInstanceAction(verb, rawRequest, replyTo, handler) {
     return ResourceServer._parseRequest(rawRequest)
       .then(request => handler(request.id, request.body))
-      .then((result) => {
-        const response = JSON.stringify({
-          status: 200,
-          body: result,
-        });
-        this._debug(`NATS PUB ${replyTo} <- ${response}`);
-        this._natsClient.publish(replyTo, response);
-      })
-      .catch((err) => {
-        if (this._logger) {
-          this._logger.error(err);
-        }
+      .then(result => this._sendResponse(replyTo, result))
+      .catch(error => this._sendError(replyTo, error));
+  }
 
-        const response = {
-          status: 500,
-          message: 'Internal Server Error',
-        };
-        if (err.statusCode) {
-          response.status = err.statusCode;
-          response.message = err.message;
-        }
-        const rawResponse = JSON.stringify(response);
-        this._debug(`NATS PUB ${replyTo} <- ${rawResponse}`);
-        this._natsClient.publish(replyTo, rawResponse);
-      });
+  _sendResponse(replyTo, result) {
+    const response = JSON.stringify({
+      status: 200,
+      body: result,
+    });
+    this._debug(`NATS PUB ${replyTo} <- ${response}`);
+    this._natsClient.publish(replyTo, response);
+  }
+
+  _sendError(replyTo, error) {
+    if (this._logger) {
+      this._logger.error(error);
+    }
+    const response = {
+      status: 500,
+      message: 'Internal Server Error',
+    };
+    if (error.statusCode) {
+      response.status = error.statusCode;
+      response.message = error.message;
+    }
+    const rawResponse = JSON.stringify(response);
+    this._debug(`NATS PUB ${replyTo} <- ${rawResponse}`);
+    this._natsClient.publish(replyTo, rawResponse);
   }
 
   _debug(message) {
