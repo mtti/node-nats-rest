@@ -1,4 +1,6 @@
 const _ = require('lodash');
+const Ajv = require('ajv');
+const createError = require('http-errors');
 
 class ResourceServer {
   static _parseRequest(rawRequest) {
@@ -18,29 +20,43 @@ class ResourceServer {
     this._name = name;
 
     this._logger = options.logger;
-    this._collectionActions = options.collectionActions;
-    this._instanceActions = options.instanceActions;
+    this._instanceLoader = options.instanceLoader || null;
+
+    if (options.actions) {
+      this._collectionActions = _.fromPairs(options.actions
+        .filter(action => action.type === 'collection')
+        .map(action => [action.verb, action]));
+      this._instanceActions = _.fromPairs(options.actions
+        .filter(action => action.type === 'instance')
+        .map(action => [action.verb, action]));
+    }
+
+    this._jsonValidation = options.jsonValidation || 'permissive';
+    this._jsonSchemas = options.jsonSchemas || {};
+    this._ajv = new Ajv({
+      schemas: this._jsonSchemas,
+    });
   }
 
   start() {
     const options = {
       queue: 'rest',
     };
-    _.forOwn(this._collectionActions, (handler, verb) => {
-      const subject = `${this._name}.collection.${verb}`;
+    _.forOwn(this._collectionActions, (action) => {
+      const subject = `${this._name}.collection.${action.verb}`;
       this._debug(`NATS subscribe ${subject}`);
       this._natsClient.subscribe(`${subject}`, options, (rawRequest, replyTo) => {
         this._debug(`NATS REC ${subject} -> ${rawRequest}`);
-        this._handleCollectionAction(verb, rawRequest, replyTo, handler);
+        this._handleCollectionAction(action, rawRequest, replyTo);
       });
     });
 
-    _.forOwn(this._instanceActions, (handler, verb) => {
-      const subject = `${this._name}.instance.${verb}`;
+    _.forOwn(this._instanceActions, (action) => {
+      const subject = `${this._name}.instance.${action.verb}`;
       this._debug(`NATS subscribe ${subject}`);
       this._natsClient.subscribe(`${subject}`, options, (rawRequest, replyTo) => {
         this._debug(`NATS REC ${subject} -> ${rawRequest}`);
-        this._handleInstanceAction(verb, rawRequest, replyTo, handler);
+        this._handleInstanceAction(action, rawRequest, replyTo);
       });
     });
   }
@@ -51,16 +67,60 @@ class ResourceServer {
     this._natsClient.publish(this._name, rawMessage);
   }
 
-  _handleCollectionAction(verb, rawRequest, replyTo, handler) {
+  _compileSchemas(schemas) {
+    return _.mapValues(schemas, schema => this._ajv.compile(schema));
+  }
+
+  _validateBody(action, request) {
+    if (!('body' in request)) {
+      return request;
+    }
+
+    const validatorRef = action.bodySchema;
+    if (!validatorRef) {
+      if (this._jsonValidation === 'strict') {
+        throw createError(400, `No JSON schema found for ${action.verb}`);
+      }
+      return request;
+    }
+
+    const validate = this._ajv.getSchema(validatorRef);
+    if (!validate(request.body)) {
+      let errorMessage = '';
+      if (validate.errors) {
+        errorMessage = validate.errors
+          .map(error => `${error.dataPath} ${error.message}`)
+          .join(',');
+      }
+
+      this._logValidationErrors(validate.errors);
+      throw createError(
+        400,
+        `Validation error: ${errorMessage}`,
+      );
+    }
+
+    return request;
+  }
+
+  _handleCollectionAction(action, rawRequest, replyTo) {
     return ResourceServer._parseRequest(rawRequest)
-      .then(request => handler(request.body))
+      .then(request => this._validateBody(action, request))
+      .then(request => action.handle(request.body))
       .then(result => this._sendResponse(replyTo, result))
       .catch(error => this._sendError(replyTo, error));
   }
 
-  _handleInstanceAction(verb, rawRequest, replyTo, handler) {
+  _handleInstanceAction(action, rawRequest, replyTo) {
     return ResourceServer._parseRequest(rawRequest)
-      .then(request => handler(request.id, request.body))
+      .then(request => this._validateBody(action, request))
+      .then((request) => {
+        if (this._instanceLoader && action.loadInstance) {
+          return this._instanceLoader(request.id)
+            .then(instance => action.handle(instance, request.body));
+        }
+        return action.handle(request.id, request.body);
+      })
       .then(result => this._sendResponse(replyTo, result))
       .catch(error => this._sendError(replyTo, error));
   }
@@ -94,6 +154,12 @@ class ResourceServer {
   _debug(message) {
     if (this._logger) {
       this._logger.debug(message);
+    }
+  }
+
+  _logValidationErrors(errors) {
+    if (this._logger) {
+      this._logger.warning(errors);
     }
   }
 }

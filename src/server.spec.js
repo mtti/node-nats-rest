@@ -1,11 +1,13 @@
 const createError = require('http-errors');
 const ResourceServer = require('./server');
+const { InstanceAction } = require('./action');
 
 describe('ResourceServer', () => {
   const testVerbs = ['GET', 'PUT', 'PATCH', 'DELETE'];
   let server;
   let serverOptions;
   let handler;
+  let action;
   let natsClient;
 
   beforeEach(() => {
@@ -15,11 +17,10 @@ describe('ResourceServer', () => {
     };
 
     serverOptions = {
-      collectionActions: {},
-      instanceActions: {},
+      actions: [],
     };
     testVerbs.forEach((verb) => {
-      serverOptions.instanceActions[verb] = spy();
+      serverOptions.actions.push(new InstanceAction(verb, spy()));
     });
 
     server = new ResourceServer(natsClient, 'dummy', serverOptions);
@@ -61,11 +62,11 @@ describe('ResourceServer', () => {
 
       beforeEach(() => {
         handler = sinon.stub().resolves(result);
+        action = new InstanceAction('dummyVerb', handler);
         return server._handleInstanceAction(
-          'dummyVerb',
+          action,
           JSON.stringify(request),
           'replyTopic',
-          handler,
         );
       });
 
@@ -94,11 +95,11 @@ describe('ResourceServer', () => {
     describe('when handler returns promise rejected with HTTP 404 error', () => {
       beforeEach(() => {
         handler = sinon.stub().rejects(createError(404));
+        action = new InstanceAction('dummyVerb', handler);
         return server._handleInstanceAction(
-          'dummyVerb',
+          action,
           JSON.stringify(request),
           'replyTopic',
-          handler,
         );
       });
 
@@ -122,11 +123,11 @@ describe('ResourceServer', () => {
     describe('when handler returns promise rejected with regular error', () => {
       beforeEach(() => {
         handler = sinon.stub().rejects(new Error('Generic error'));
+        action = new InstanceAction('dummyVerb', handler);
         return server._handleInstanceAction(
-          'dummyVerb',
+          action,
           JSON.stringify(request),
           'replyTopic',
-          handler,
         );
       });
 
@@ -150,11 +151,11 @@ describe('ResourceServer', () => {
     describe('when handler throws a regular error', () => {
       beforeEach(() => {
         handler = sinon.stub().throws(new Error('Generic thrown error'));
+        action = new InstanceAction('dummyVerb', handler);
         return server._handleInstanceAction(
-          'dummyVerb',
+          action,
           JSON.stringify(request),
           'replyTopic',
-          handler,
         );
       });
 
