@@ -1,3 +1,4 @@
+const _ = require('lodash');
 const bodyParser = require('body-parser');
 const express = require('express');
 const nats = require('nats');
@@ -7,6 +8,40 @@ const ResourceSubscription = require('./subscription');
 const jsonParser = bodyParser.json();
 
 class ResourceClient {
+  /**
+   * Creates a microservice plugin which initializes resource clients for a list of resource
+   * names.
+   * @param {string[]} resourceNames
+   * @param {Object} options
+   */
+  static plugin(resourceNames, options = {}) {
+    return {
+      init(service) {
+        const resourceClients = resourceNames
+          .map((name) => {
+            const resourceOptions = {
+              logger: service.logger,
+            };
+            _.merge(resourceOptions, options);
+
+            const key = `${name}Client`;
+            if (service[key]) {
+              throw new Error(`Can't create ResourceClient: service.${key} is already in use`);
+            }
+
+            const client = new ResourceClient(
+              service.natsClient,
+              name,
+              resourceOptions,
+            );
+            return [key, client];
+          });
+
+        _.merge(service, _.fromPairs(resourceClients));
+      }
+    };
+  }
+
   constructor(natsClient, name, options = {}) {
     this._natsClient = natsClient;
     this._name = name;

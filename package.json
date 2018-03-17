@@ -1,6 +1,6 @@
 {
   "name": "@mtti/nats-rest",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "REST over NATS",
   "author": "Matti Hiltunen",
   "license": "Apache-2.0",
