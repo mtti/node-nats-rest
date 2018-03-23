@@ -31,7 +31,6 @@ class ResourceServer {
         .map(action => [action.verb, action]));
     }
 
-    this._jsonValidation = options.jsonValidation || 'permissive';
     this._jsonSchemas = options.jsonSchemas || {};
     this._ajv = new Ajv({
       schemas: this._jsonSchemas,
@@ -76,15 +75,15 @@ class ResourceServer {
       return request;
     }
 
-    const validatorRef = action.bodySchema;
-    if (!validatorRef) {
-      if (this._jsonValidation === 'strict') {
+    const jsonSchemaRef = action.bodySchema;
+    if (!jsonSchemaRef) {
+      if (jsonSchemaRef !== false) {
         throw createError(400, `No JSON schema found for ${action.verb}`);
       }
       return request;
     }
 
-    const validate = this._ajv.getSchema(validatorRef);
+    const validate = this._ajv.getSchema(jsonSchemaRef);
     if (!validate(request.body)) {
       let errorMessage = '';
       if (validate.errors) {
