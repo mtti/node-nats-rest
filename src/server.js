@@ -1,6 +1,9 @@
 const _ = require('lodash');
 const Ajv = require('ajv');
 const createError = require('http-errors');
+const jsonpatch = require('fast-json-patch');
+const { InstanceAction } = require('./action');
+const jsonPatchSchema = require('./json-patch.schema.json');
 
 class ResourceServer {
   static _parseRequest(rawRequest) {
@@ -20,18 +23,40 @@ class ResourceServer {
     this._name = name;
 
     this._logger = options.logger;
-    this._instanceLoader = options.instanceLoader || null;
+    this._adapter = options.adapter || null;
+    this._schemaRef = options.schemaRef || false;
 
+    const getAction = new InstanceAction('GET', this._get.bind(this))
+      .setAutoLoadMode('json');
+    const putAction = new InstanceAction('PUT', this._put.bind(this))
+      .setSchemaRef(this._schemaRef)
+      .setAutoLoadMode(false);
+    const patchAction = new InstanceAction('PATCH', this._patch.bind(this))
+      .setSchemaRef('http://mattihiltunen.com/schemas/json-patch.json')
+      .setAutoLoadMode('json');
+    const deleteAction = new InstanceAction('DELETE', this._delete.bind(this))
+      .setAutoLoadMode(false);
+
+    const actions = [getAction, putAction, patchAction, deleteAction];
     if (options.actions) {
-      this._collectionActions = _.fromPairs(options.actions
-        .filter(action => action.type === 'collection')
-        .map(action => [action.verb, action]));
-      this._instanceActions = _.fromPairs(options.actions
-        .filter(action => action.type === 'instance')
-        .map(action => [action.verb, action]));
+      Array.prototype.push.apply(actions, options.actions);
     }
 
-    this._jsonSchemas = options.jsonSchemas || {};
+    this._collectionActions = _.fromPairs(
+      actions
+        .filter(action => action.type === 'collection')
+        .map(action => [action.verb, action])
+    );
+    this._instanceActions = _.fromPairs(
+      actions
+        .filter(action => action.type === 'instance')
+        .map(action => [action.verb, action])
+    );
+
+    this._jsonSchemas = [ jsonPatchSchema ];
+    if (options.jsonSchemas) {
+      Array.prototype.push.apply(this._jsonSchemas, options.jsonSchemas);
+    }
     this._ajv = new Ajv({
       schemas: this._jsonSchemas,
     });
@@ -66,6 +91,35 @@ class ResourceServer {
     this._natsClient.publish(this._name, rawMessage);
   }
 
+  _get(instance) {
+    return Promise.resolve(instance);
+  }
+
+  _put(id, body) {
+    return this._adapter.upsert(id, body);
+  }
+
+  _patch(instance, patch) {
+    const newInstance = jsonpatch.applyPatch(instance, patch).newDocument;
+
+    if (this._schemaRef !== false) {
+      const validate = this._ajv.getSchema(this._schemaRef);
+      if (!validate) {
+        throw new Error('Could not find JSON schema to validate object');
+      }
+      if (!validate(newInstance)) {
+        throw createError(400, validate.errors);
+      }
+    }
+
+    return this._adapter.upsert(instance.id, newInstance)
+      .then(newInstance => this._adapter.toJSON(newInstance));
+  }
+
+  _delete(id) {
+    return this._adapter.delete(id);
+  }
+
   _compileSchemas(schemas) {
     return _.mapValues(schemas, schema => this._ajv.compile(schema));
   }
@@ -75,7 +129,7 @@ class ResourceServer {
       return request;
     }
 
-    const jsonSchemaRef = action.bodySchema;
+    const jsonSchemaRef = action.schemaRef;
     if (!jsonSchemaRef) {
       if (jsonSchemaRef !== false) {
         throw createError(400, `No JSON schema found for ${action.verb}`);
@@ -93,10 +147,7 @@ class ResourceServer {
       }
 
       this._logValidationErrors(validate.errors);
-      throw createError(
-        400,
-        `Validation error: ${errorMessage}`,
-      );
+      throw createError(400, `Validation error: ${errorMessage}`);
     }
 
     return request;
@@ -114,9 +165,23 @@ class ResourceServer {
     return ResourceServer._parseRequest(rawRequest)
       .then(request => this._validateBody(action, request))
       .then((request) => {
-        if (this._instanceLoader && action.loadInstance) {
-          return this._instanceLoader(request.id)
-            .then(instance => action.handle(instance, request.body));
+        if (action.autoLoadMode === 'raw') {
+          return this._adapter.load(request.id)
+            .then((instance) => {
+              if (!instance) {
+                throw createError(404);
+              }
+              return action.handle(instance, request.body);
+            });
+        } else if (action.autoLoadMode === 'json') {
+          return this._adapter.load(request.id)
+            .then((instance) => {
+              if (!instance) {
+                throw createError(404);
+              }
+              return this._adapter.toJSON(instance);
+            })
+            .then(instanceJSON => action.handle(instanceJSON, request.body));
         }
         return action.handle(request.id, request.body);
       })

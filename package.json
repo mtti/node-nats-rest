@@ -1,6 +1,6 @@
 {
   "name": "@mtti/nats-rest",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "REST over NATS",
   "author": "Matti Hiltunen",
   "license": "Apache-2.0",
@@ -15,6 +15,7 @@
   "dependencies": {
     "ajv": "6.3.0",
     "express": "4.16.3",
+    "fast-json-patch": "2.0.6",
     "body-parser": "1.18.2",
     "http-errors": "1.6.2",
     "lodash": "4.17.5",
