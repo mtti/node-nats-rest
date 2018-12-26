@@ -38,13 +38,14 @@ class ResourceClient {
           });
 
         _.merge(service, _.fromPairs(resourceClients));
-      }
+      },
     };
   }
 
   constructor(natsClient, name, options = {}) {
     this._natsClient = natsClient;
     this._name = name;
+    this._timeout = options.timeout || 1000;
 
     if (options.logger) {
       this._logger = options.logger;
@@ -173,21 +174,27 @@ class ResourceClient {
 
     return new Promise((resolve, reject) => {
       this._debug(`NATS requestOne ${subject}`);
-      this._natsClient.requestOne(subject, JSON.stringify(request), {}, 1000, (rawResponse) => {
-        if (rawResponse.code && rawResponse.code === nats.REQ_TIMEOUT) {
-          reject(createError(504));
-          return;
-        }
+      this._natsClient.requestOne(
+        subject,
+        JSON.stringify(request),
+        {},
+        this._timeout,
+        (rawResponse) => {
+          if (rawResponse.code && rawResponse.code === nats.REQ_TIMEOUT) {
+            reject(createError(504));
+            return;
+          }
 
-        const response = JSON.parse(rawResponse);
+          const response = JSON.parse(rawResponse);
 
-        if (response.status >= 400) {
-          reject(createError(response.status, response.message));
-          return;
-        }
+          if (response.status >= 400) {
+            reject(createError(response.status, response.message));
+            return;
+          }
 
-        resolve(response.body);
-      });
+          resolve(response.body);
+        },
+      );
     });
   }
 
